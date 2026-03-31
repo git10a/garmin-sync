@@ -7,6 +7,8 @@ on:
         description: 'YYYY-MM-DD。空なら今日（JST）'
         required: false
         type: string
+  schedule:
+    - cron: '0 22 * * *'  # 毎日JST 7:00 (UTC 22:00)
 
 jobs:
   sync:
@@ -26,6 +28,7 @@ jobs:
 
       - name: Run sync
         env:
+          GARMIN_TOKENSTORE: ${{ secrets.GARMIN_TOKENSTORE }}
           GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}
           GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
