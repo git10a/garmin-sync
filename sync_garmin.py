@@ -320,7 +320,8 @@ def build_health_row(client: Garmin, date_str: str) -> list:
             if acts_tmp:
                 client.display_name = acts_tmp[0].get("ownerDisplayName")
         rhr_raw = safe_call(client, "get_rhr_day", date_str) or {}
-        rhr = _v(rhr_raw, "allMetrics", "metricsMap", "RESTING_HEART_RATE", 0, "value") or \
+        rhr = _v(rhr_raw, "allMetrics", "metricsMap", "WELLNESS_RESTING_HEART_RATE", 0, "value") or \
+              _v(rhr_raw, "allMetrics", "metricsMap", "RESTING_HEART_RATE", 0, "value") or \
               rhr_raw.get("value") or rhr_raw.get("restingHeartRate") or ""
     except Exception as e:
         print(f"  RHR取得失敗: {e}")
