@@ -130,6 +130,13 @@ def login_garmin() -> Garmin:
 
 # ── ユーティリティ ─────────────────────────────────────────────────────────────
 
+CELL_MAX = 49000  # Sheets の1セル上限は50,000文字
+
+
+def _truncate(s: str) -> str:
+    return s[:CELL_MAX] if len(s) > CELL_MAX else s
+
+
 def safe_get(d, *keys):
     for k in keys:
         if isinstance(d, dict):
@@ -251,11 +258,11 @@ def build_activity_row(a: dict, detail: dict, laps) -> list:
         safe_get(raw, "trainingStressScore"),
         safe_get(raw, "vO2MaxValue") or safe_get(a, "vO2MaxValue"),
         # ラップ
-        json.dumps(laps, ensure_ascii=False) if laps else "",
+        _truncate(json.dumps(laps, ensure_ascii=False) if laps else ""),
         # デバイス
         safe_get(raw, "deviceName") or safe_get(raw, "deviceId"),
         # 生データ
-        json.dumps(raw, ensure_ascii=False),
+        _truncate(json.dumps(raw, ensure_ascii=False)),
     ]
 
 
@@ -386,7 +393,7 @@ def build_health_row(client: Garmin, date_str: str) -> list:
         total_steps, step_goal, floors_up, floors_down,
         active_cal, total_cal, mod_min, vig_min,
         # 生データ
-        json.dumps(raw_combined, ensure_ascii=False),
+        _truncate(json.dumps(raw_combined, ensure_ascii=False)),
     ]
 
 
