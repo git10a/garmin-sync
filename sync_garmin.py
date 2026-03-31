@@ -119,6 +119,15 @@ def _truncate(s: str) -> str:
     return s[:CELL_MAX] if len(s) > CELL_MAX else s
 
 
+def _col_letter(n: int) -> str:
+    """1始まりの列番号をA/AA/AB形式に変換。"""
+    result = ""
+    while n > 0:
+        n, r = divmod(n - 1, 26)
+        result = chr(65 + r) + result
+    return result
+
+
 def _v(d, *keys):
     """ネストしたdictから値を安全に取得。"""
     for k in keys:
@@ -259,7 +268,7 @@ def upsert_activities(ws, activities: list, client: Garmin):
         laps = get_laps(client, activity_id)
         row = build_activity_row(a, laps)
 
-        col_end = chr(ord("A") + len(row) - 1)
+        col_end = _col_letter(len(row))
         if activity_id in id_to_row:
             rn = id_to_row[activity_id]
             ws.update(f"A{rn}:{col_end}{rn}", [row])
