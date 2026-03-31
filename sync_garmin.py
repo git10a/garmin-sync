@@ -303,7 +303,7 @@ def build_health_row(client: Garmin, date_str: str) -> list:
     # Body Battery（stress_dataに含まれている）
     stress_raw = safe_call(client, "get_stress_data", date_str) or {}
     bb_vals = stress_raw.get("bodyBatteryValuesArray") or []
-    bb_nums = [v[1] for v in bb_vals if isinstance(v, list) and len(v) >= 2 and v[1] is not None and v[1] >= 0]
+    bb_nums = [int(v[1]) for v in bb_vals if isinstance(v, list) and len(v) >= 2 and v[1] is not None and str(v[1]).lstrip("-").isdigit() and int(v[1]) >= 0]
     bb_high = max(bb_nums) if bb_nums else ""
     bb_low = min(bb_nums) if bb_nums else ""
 
