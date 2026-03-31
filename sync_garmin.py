@@ -174,7 +174,8 @@ def fetch_activities_for_date(client: Garmin, target_date: datetime) -> list:
     for a in activities:
         time_str = a.get("startTimeGMT") or a.get("startTimeLocal") or ""
         dt = parse_start_time(time_str)
-        if dt and dt.astimezone(JST).date() == start_local.date():
+        type_key = _v(a, "activityType", "typeKey") or ""
+        if dt and dt.astimezone(JST).date() == start_local.date() and "running" in type_key:
             picked.append(a)
     return picked
 
@@ -299,10 +300,10 @@ def build_health_row(client: Garmin, date_str: str) -> list:
     hrv_raw = safe_call(client, "get_hrv_data", date_str) or {}
     hrv_s = hrv_raw.get("hrvSummary") or {}
 
-    # Body Battery（stress_dataに含まれている）
+    # Body Battery（stress_dataに含まれている。形式: [timestamp, 'MEASURED', value, ...]）
     stress_raw = safe_call(client, "get_stress_data", date_str) or {}
     bb_vals = stress_raw.get("bodyBatteryValuesArray") or []
-    bb_nums = [int(v[1]) for v in bb_vals if isinstance(v, list) and len(v) >= 2 and v[1] is not None and str(v[1]).lstrip("-").isdigit() and int(v[1]) >= 0]
+    bb_nums = [v[2] for v in bb_vals if isinstance(v, list) and len(v) >= 3 and isinstance(v[2], (int, float)) and v[2] >= 0]
     bb_high = max(bb_nums) if bb_nums else ""
     bb_low = min(bb_nums) if bb_nums else ""
 
@@ -311,10 +312,19 @@ def build_health_row(client: Garmin, date_str: str) -> list:
     avg_spo2 = spo2_raw.get("averageSpO2") or ""
     min_spo2 = spo2_raw.get("lowestSpO2") or ""
 
-    # 安静時心拍 (get_rhr_day)
-    rhr_raw = safe_call(client, "get_rhr_day", date_str) or {}
-    rhr = _v(rhr_raw, "allMetrics", "metricsMap", "RESTING_HEART_RATE", 0, "value") or \
-          rhr_raw.get("value") or rhr_raw.get("restingHeartRate") or ""
+    # 安静時心拍（display_nameが必要なので先に取得してセット）
+    rhr = ""
+    try:
+        if not client.display_name:
+            acts_tmp = client.get_activities_by_date(startdate=date_str, enddate=date_str)
+            if acts_tmp:
+                client.display_name = acts_tmp[0].get("ownerDisplayName")
+        rhr_raw = safe_call(client, "get_rhr_day", date_str) or {}
+        rhr = _v(rhr_raw, "allMetrics", "metricsMap", "RESTING_HEART_RATE", 0, "value") or \
+              rhr_raw.get("value") or rhr_raw.get("restingHeartRate") or ""
+    except Exception as e:
+        print(f"  RHR取得失敗: {e}")
+        rhr_raw = {}
 
     # 歩数・強度 (get_steps_data)
     steps_raw = safe_call(client, "get_steps_data", date_str) or {}
