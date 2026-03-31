@@ -100,6 +100,19 @@ def login_garmin() -> Garmin:
                 f.write(content if isinstance(content, str) else json.dumps(content))
         client = Garmin()
         client.garth.load(tmpdir)
+        # display_name を設定（get_rhr_day 等で必要）
+        try:
+            today = datetime.now(JST).strftime("%Y-%m-%d")
+            acts_tmp = client.get_activities_by_date(startdate=today, enddate=today)
+            if not acts_tmp:
+                # 直近7日で探す
+                week_ago = (datetime.now(JST) - timedelta(days=7)).strftime("%Y-%m-%d")
+                acts_tmp = client.get_activities_by_date(startdate=week_ago, enddate=today)
+            if acts_tmp:
+                client.display_name = acts_tmp[0].get("ownerDisplayName") or ""
+                print(f"Garmin: display_name={client.display_name}")
+        except Exception as e:
+            print(f"  display_name 取得失敗（無視）: {e}")
         print("Garmin: トークン認証で接続")
         return client
 
@@ -129,10 +142,12 @@ def _col_letter(n: int) -> str:
 
 
 def _v(d, *keys):
-    """ネストしたdictから値を安全に取得。"""
+    """ネストしたdict/listから値を安全に取得。整数キーはリストインデックスとして扱う。"""
     for k in keys:
         if isinstance(d, dict):
             d = d.get(k)
+        elif isinstance(d, list) and isinstance(k, int):
+            d = d[k] if len(d) > k else None
         else:
             return ""
     return d if d is not None else ""
@@ -312,20 +327,11 @@ def build_health_row(client: Garmin, date_str: str) -> list:
     avg_spo2 = spo2_raw.get("averageSpO2") or ""
     min_spo2 = spo2_raw.get("lowestSpO2") or ""
 
-    # 安静時心拍（display_nameが必要なので先に取得してセット）
-    rhr = ""
-    try:
-        if not client.display_name:
-            acts_tmp = client.get_activities_by_date(startdate=date_str, enddate=date_str)
-            if acts_tmp:
-                client.display_name = acts_tmp[0].get("ownerDisplayName")
-        rhr_raw = safe_call(client, "get_rhr_day", date_str) or {}
-        rhr = _v(rhr_raw, "allMetrics", "metricsMap", "WELLNESS_RESTING_HEART_RATE", 0, "value") or \
-              _v(rhr_raw, "allMetrics", "metricsMap", "RESTING_HEART_RATE", 0, "value") or \
-              rhr_raw.get("value") or rhr_raw.get("restingHeartRate") or ""
-    except Exception as e:
-        print(f"  RHR取得失敗: {e}")
-        rhr_raw = {}
+    # 安静時心拍
+    rhr_raw = safe_call(client, "get_rhr_day", date_str) or {}
+    rhr = _v(rhr_raw, "allMetrics", "metricsMap", "WELLNESS_RESTING_HEART_RATE", 0, "value") or \
+          _v(rhr_raw, "allMetrics", "metricsMap", "RESTING_HEART_RATE", 0, "value") or \
+          rhr_raw.get("value") or rhr_raw.get("restingHeartRate") or ""
 
     # 歩数・強度 (get_steps_data)
     steps_raw = safe_call(client, "get_steps_data", date_str) or {}
