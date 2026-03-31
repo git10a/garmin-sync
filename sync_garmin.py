@@ -268,10 +268,9 @@ def upsert_activities(ws, activities: list, client: Garmin):
         laps = get_laps(client, activity_id)
         row = build_activity_row(a, laps)
 
-        col_end = _col_letter(len(row))
         if activity_id in id_to_row:
             rn = id_to_row[activity_id]
-            ws.update(f"A{rn}:{col_end}{rn}", [row])
+            ws.update([row], f"A{rn}")
         else:
             ws.append_row(row)
 
@@ -378,10 +377,9 @@ def upsert_health(ws, date_str: str, row: list):
     existing = ws.get_all_values()
     date_to_row = {r[0]: idx + 2 for idx, r in enumerate(existing[1:]) if r}
 
-    col_end = chr(ord("A") + len(row) - 1)
     if date_str in date_to_row:
         rn = date_to_row[date_str]
-        ws.update(f"A{rn}:{col_end}{rn}", [row])
+        ws.update([row], f"A{rn}")
     else:
         ws.append_row(row)
 
