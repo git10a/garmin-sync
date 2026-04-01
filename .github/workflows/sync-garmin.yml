@@ -9,6 +9,7 @@ on:
         type: string
   schedule:
     - cron: '0 22 * * *'  # 毎日JST 7:00 (UTC 22:00)
+    - cron: '0 0 * * *'   # 毎日JST 9:00 (UTC 0:00)
 
 jobs:
   sync:
