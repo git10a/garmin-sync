@@ -1,46 +1,46 @@
-  name: Sync Garmin
+name: Sync Garmin
 
-  on:
-    workflow_dispatch:
-      inputs:
-        target_date:
-          description: 'YYYY-MM-DD。空なら今日（JST）'
-          required: false
-          type: string
-    schedule:
-      - cron: '0 22 * * *'  # 毎日JST 7:00 (UTC 22:00)
-      - cron: '0 0 * * *'   # 毎日JST 9:00 (UTC 0:00)
+on:
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: 'YYYY-MM-DD。空なら今日（JST）'
+        required: false
+        type: string
+  schedule:
+    - cron: '0 22 * * *'  # 毎日JST 7:00 (UTC 22:00)
+    - cron: '0 0 * * *'   # 毎日JST 9:00 (UTC 0:00)
 
-  jobs:
-    sync:
-      runs-on: ubuntu-latest
+jobs:
+  sync:
+    runs-on: ubuntu-latest
 
-      steps:
-        - name: Checkout
-          uses: actions/checkout@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-        - name: Set up Python
-          uses: actions/setup-python@v5
-          with:
-            python-version: '3.11'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-        - name: Install dependencies
-          run: pip install -r requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
-        - name: Restore Garmin token cache
-          uses: actions/cache@v4
-          with:
-            path: ~/.garmin-tokens
-            key: garmin-tokens-${{ github.run_id }}
-            restore-keys: garmin-tokens-
+      - name: Restore Garmin token cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.garmin-tokens
+          key: garmin-tokens-${{ github.run_id }}
+          restore-keys: garmin-tokens-
 
-        - name: Run sync
-          env:
-            GARMIN_TOKENSTORE: ${{ secrets.GARMIN_TOKENSTORE }}
-            GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}
-            GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
-            GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON
-   }}
-            TARGET_DATE: ${{ github.event.inputs.target_date }}
-          run: python sync_garmin.py
+      - name: Run sync
+        env:
+          GARMIN_TOKENSTORE: ${{ secrets.GARMIN_TOKENSTORE }}
+          GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}
+          GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON
+ }}
+          TARGET_DATE: ${{ github.event.inputs.target_date }}
+        run: python sync_garmin.py
 
