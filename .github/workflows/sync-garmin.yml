@@ -39,8 +39,7 @@ jobs:
           GARMIN_TOKENSTORE: ${{ secrets.GARMIN_TOKENSTORE }}
           GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}
           GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
-          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON
- }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON}}
           TARGET_DATE: ${{ github.event.inputs.target_date }}
         run: python sync_garmin.py
 
