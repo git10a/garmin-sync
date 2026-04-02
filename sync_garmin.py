@@ -12,11 +12,12 @@ Garmin Connect → Google Sheets 同期スクリプト
 import json
 import os
 import tempfile
+import time
 from datetime import datetime, timedelta, timezone
 
 import gspread
 from google.oauth2.service_account import Credentials
-from garminconnect import Garmin
+from garminconnect import Garmin, GarminConnectTooManyRequestsError
 
 SPREADSHEET_ID = "1Dz8URjVnODUBY51xjL3iD6eEhv-K8Na7DPEQ638OMmY"
 SHEET_ACTIVITY = "garmin_activity_raw"
@@ -26,6 +27,8 @@ TIMEZONE_OFFSET_HOURS = 9  # JST
 JST = timezone(timedelta(hours=TIMEZONE_OFFSET_HOURS))
 
 CELL_MAX = 49000  # Sheets の1セル上限は50,000文字
+RETRY_MAX = 3
+RETRY_BASE_WAIT = 30  # 秒
 
 
 # ── Google Sheets ──────────────────────────────────────────────────────────────
@@ -90,6 +93,20 @@ def ensure_sheet_with_headers(sh, title: str, headers: list[str]):
 
 # ── Garmin 認証 ────────────────────────────────────────────────────────────────
 
+def garmin_retry(func, *args, **kwargs):
+    """429 レートリミット時に exponential backoff でリトライする。"""
+    for attempt in range(RETRY_MAX):
+        try:
+            return func(*args, **kwargs)
+        except (GarminConnectTooManyRequestsError, Exception) as e:
+            is_rate_limit = isinstance(e, GarminConnectTooManyRequestsError) or "429" in str(e)
+            if not is_rate_limit or attempt == RETRY_MAX - 1:
+                raise
+            wait = RETRY_BASE_WAIT * (2 ** attempt)
+            print(f"  429 レートリミット。{wait}秒待機してリトライ ({attempt + 1}/{RETRY_MAX})...")
+            time.sleep(wait)
+
+
 def login_garmin() -> Garmin:
     tokenstore_json = os.getenv("GARMIN_TOKENSTORE")
     if tokenstore_json:
@@ -100,19 +117,14 @@ def login_garmin() -> Garmin:
                 f.write(content if isinstance(content, str) else json.dumps(content))
         client = Garmin()
         client.garth.load(tmpdir)
-        # display_name を設定（get_rhr_day 等で必要）
+        # display_name を garth プロファイルから取得（API呼び出し不要）
         try:
-            today = datetime.now(JST).strftime("%Y-%m-%d")
-            acts_tmp = client.get_activities_by_date(startdate=today, enddate=today)
-            if not acts_tmp:
-                # 直近7日で探す
-                week_ago = (datetime.now(JST) - timedelta(days=7)).strftime("%Y-%m-%d")
-                acts_tmp = client.get_activities_by_date(startdate=week_ago, enddate=today)
-            if acts_tmp:
-                client.display_name = acts_tmp[0].get("ownerDisplayName") or ""
-                print(f"Garmin: display_name={client.display_name}")
-        except Exception as e:
-            print(f"  display_name 取得失敗（無視）: {e}")
+            profile = client.garth.profile
+            client.display_name = profile.get("displayName") or profile.get("userName") or ""
+            print(f"Garmin: display_name={client.display_name}")
+        except Exception:
+            client.display_name = ""
+            print("  display_name をプロファイルから取得できず（無視）")
         print("Garmin: トークン認証で接続")
         return client
 
@@ -171,7 +183,7 @@ def safe_call(client, method_name, *args, **kwargs):
     m = getattr(client, method_name, None)
     if callable(m):
         try:
-            return m(*args, **kwargs)
+            return garmin_retry(m, *args, **kwargs)
         except Exception as e:
             print(f"  {method_name} 取得失敗: {e}")
     return None
@@ -184,7 +196,7 @@ def fetch_activities_for_date(client: Garmin, target_date: datetime) -> list:
     start_str = (start_local - timedelta(days=1)).strftime("%Y-%m-%d")
     end_str = (start_local + timedelta(days=1)).strftime("%Y-%m-%d")
 
-    activities = client.get_activities_by_date(startdate=start_str, enddate=end_str)
+    activities = garmin_retry(client.get_activities_by_date, startdate=start_str, enddate=end_str)
     picked = []
     for a in activities:
         time_str = a.get("startTimeGMT") or a.get("startTimeLocal") or ""
@@ -200,7 +212,7 @@ def get_laps(client: Garmin, activity_id):
         m = getattr(client, method_name, None)
         if callable(m):
             try:
-                result = m(activity_id)
+                result = garmin_retry(m, activity_id)
                 if result:
                     return result
             except Exception:
