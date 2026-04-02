@@ -93,33 +93,68 @@ def ensure_sheet_with_headers(sh, title: str, headers: list[str]):
 
 # ── Garmin 認証 ────────────────────────────────────────────────────────────────
 
-def login_garmin() -> Garmin:
+GARMIN_TOKEN_DIR = os.path.expanduser("~/.garmin-tokens")
+
+
+def _load_token_dir() -> str | None:
+    """キャッシュ → GARMIN_TOKENSTORE secret の優先順でトークンディレクトリを準備。"""
+    # 1. Actions cache から復元されたトークン
+    if os.path.isdir(GARMIN_TOKEN_DIR) and os.listdir(GARMIN_TOKEN_DIR):
+        print(f"トークンキャッシュ発見: {GARMIN_TOKEN_DIR}")
+        return GARMIN_TOKEN_DIR
+
+    # 2. GARMIN_TOKENSTORE secret
     tokenstore_json = os.getenv("GARMIN_TOKENSTORE")
     if tokenstore_json:
         token_data = json.loads(tokenstore_json)
-        tmpdir = tempfile.mkdtemp()
+        os.makedirs(GARMIN_TOKEN_DIR, exist_ok=True)
         for fname, content in token_data.items():
-            with open(os.path.join(tmpdir, fname), "w") as f:
+            with open(os.path.join(GARMIN_TOKEN_DIR, fname), "w") as f:
                 f.write(content if isinstance(content, str) else json.dumps(content))
-        client = Garmin()
-        client.garth.load(tmpdir)
-        # display_name を garth プロファイルから取得（API呼び出し不要）
-        try:
-            profile = client.garth.profile
-            client.display_name = profile.get("displayName") or profile.get("userName") or ""
-            print(f"Garmin: display_name={client.display_name}")
-        except Exception:
-            client.display_name = ""
-            print("  display_name をプロファイルから取得できず（無視）")
-        print("Garmin: トークン認証で接続")
-        return client
+        print("GARMIN_TOKENSTORE からトークン展開")
+        return GARMIN_TOKEN_DIR
 
+    return None
+
+
+def _save_tokens(client: Garmin):
+    """成功後にトークンをキャッシュディレクトリに保存（次回のActions cacheで使われる）。"""
+    os.makedirs(GARMIN_TOKEN_DIR, exist_ok=True)
+    client.garth.dump(GARMIN_TOKEN_DIR)
+    print(f"トークン保存: {GARMIN_TOKEN_DIR}")
+
+
+def login_garmin() -> Garmin:
+    token_dir = _load_token_dir()
     email = os.getenv("GARMIN_EMAIL")
     password = os.getenv("GARMIN_PASSWORD")
+
+    # 1. トークン認証を試行
+    if token_dir:
+        try:
+            client = Garmin()
+            client.garth.load(token_dir)
+            try:
+                profile = client.garth.profile
+                client.display_name = profile.get("displayName") or profile.get("userName") or ""
+            except Exception:
+                client.display_name = ""
+            # トークンが有効か軽く検証（APIは叩かない — profile取得できれば十分）
+            print(f"Garmin: トークン認証で接続 (display_name={client.display_name})")
+            return client
+        except Exception as e:
+            print(f"  トークン認証失敗: {e}")
+            if email and password:
+                print("  メール/パスワードでフォールバック...")
+            else:
+                raise
+
+    # 2. メール/パスワード認証
     if not email or not password:
         raise RuntimeError("GARMIN_TOKENSTORE または GARMIN_EMAIL+GARMIN_PASSWORD が必要です")
-    client = Garmin(email=email, password=password)
+    client = Garmin(email, password)
     client.login()
+    _save_tokens(client)
     print("Garmin: メール/パスワードで接続")
     return client
 
@@ -433,6 +468,7 @@ def main():
     for attempt in range(RETRY_MAX):
         try:
             sync(garmin, gsheet_client, target_date, date_str)
+            _save_tokens(garmin)
             print(f"完了: {date_str}")
             return
         except (GarminConnectTooManyRequestsError, Exception) as e:
